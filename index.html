@@ -1,0 +1,833 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>
+  :root { padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+  body { margin: 0; font: 14px system-ui, sans-serif; }
+  [hidden] { display: none !important; }
+</style>
+<title>단청 벽돌깨기</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=IBM+Plex+Mono:wght@500&family=IBM+Plex+Sans+KR:wght@400;600&display=swap">
+<style>
+  /* Layout: one screen — HUD bar, the board centred and scaled to fit, power-up legend strip below */
+  :root {
+    --ink: #141a2e;
+    --ink-2: #1c2340;
+    --line: #2d3560;
+    --paper: #efe6d2;
+    --muted: #979dc2;
+    --gold: #e3b23c;
+    --red: #c8352e;
+    --teal: #2a9d8f;
+    --blue: #2f6fb5;
+    --display: "Black Han Sans", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+    --body: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+    color-scheme: dark;
+  }
+  html { box-sizing: border-box; height: 100%; background: var(--ink); }
+  *, *::before, *::after { box-sizing: inherit; }
+  body { height: 100%; background: var(--ink); color: var(--paper); font-family: var(--body); }
+
+  .app {
+    height: 100%;
+    max-width: 640px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding-block: 12px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+  }
+
+  header { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  h1 { margin: 0; font-family: var(--display); font-weight: 400; font-size: 1.75rem; line-height: 1; letter-spacing: .01em; }
+  h1 span { color: var(--gold); }
+
+  .hud { display: flex; gap: 18px; }
+  .hud div { display: flex; flex-direction: column; gap: 2px; }
+  .hud dt { font-size: .68rem; color: var(--muted); letter-spacing: .08em; }
+  .hud dd { margin: 0; font-family: var(--mono); font-size: 1rem; font-variant-numeric: tabular-nums; }
+  #lives { color: var(--red); letter-spacing: .1em; }
+
+  .stage { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; }
+  .board { position: relative; touch-action: none; cursor: none; }
+  canvas { display: block; border-radius: 4px; box-shadow: 0 0 0 1px var(--line), 0 18px 40px -20px rgba(0,0,0,.6); }
+
+  .overlay {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
+    text-align: center; padding: 24px;
+    background: rgba(20, 26, 46, .72);
+    border-radius: 4px;
+    pointer-events: none;
+  }
+  .overlay h2 { margin: 0; font-family: var(--display); font-weight: 400; font-size: clamp(1.8rem, 7vw, 2.6rem); line-height: 1.1; text-wrap: balance; }
+  .overlay p { margin: 0; max-width: 28ch; line-height: 1.55; color: var(--paper); }
+  .overlay .sub { font-family: var(--mono); font-size: .8rem; color: var(--muted); }
+  .overlay .cta { margin-top: 6px; padding: 8px 16px; border: 1px solid var(--gold); color: var(--gold); border-radius: 999px; font-weight: 600; font-size: .9rem; }
+
+  footer { display: flex; align-items: center; justify-content: space-between; gap: 10px 16px; flex-wrap: wrap; }
+  .legend { display: flex; gap: 6px 14px; flex-wrap: wrap; margin: 0; padding: 0; list-style: none; font-size: .78rem; color: var(--muted); }
+  .legend li { display: flex; align-items: center; gap: 6px; }
+  .cap { display: inline-grid; place-items: center; width: 26px; height: 16px; border-radius: 8px; font-size: .68rem; font-weight: 600; color: var(--ink); }
+  .controls { display: flex; gap: 8px; }
+  button {
+    font: inherit; font-size: .8rem; font-weight: 600;
+    color: var(--paper); background: var(--ink-2);
+    border: 1px solid var(--line); border-radius: 6px;
+    padding: 6px 12px; cursor: pointer;
+  }
+  button:hover { border-color: var(--muted); }
+  button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+
+  @media (max-width: 420px) {
+    h1 { font-size: 1.4rem; }
+    .hud { gap: 12px; }
+  }
+</style>
+
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>단청 <span>벽돌깨기</span></h1>
+    <dl class="hud">
+      <div><dt>점수</dt><dd id="score">0</dd></div>
+      <div><dt>최고</dt><dd id="hi">0</dd></div>
+      <div><dt>스테이지</dt><dd id="stage">1</dd></div>
+      <div><dt>목숨</dt><dd id="lives">●●●</dd></div>
+    </dl>
+  </header>
+
+  <div class="stage" id="stageWrap">
+    <div class="board" id="board">
+      <canvas id="cv" aria-label="벽돌깨기 게임 화면"></canvas>
+      <div class="overlay" id="overlay">
+        <h2 id="ovTitle">단청 벽돌깨기</h2>
+        <p id="ovText">마우스나 손가락으로 받침을 움직여 공을 받아내세요. 벽돌을 모두 깨면 다음 스테이지로 넘어갑니다.</p>
+        <span class="sub" id="ovSub">← → 이동 · 스페이스 발사 · P 일시정지</span>
+        <span class="cta" id="ovCta">클릭해서 시작</span>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    <ul class="legend" aria-label="아이템">
+      <li><span class="cap" style="background: var(--gold)">넓</span>받침 넓게</li>
+      <li><span class="cap" style="background: var(--teal)">셋</span>공 셋으로</li>
+      <li><span class="cap" style="background: var(--blue); color: var(--paper)">느</span>공 느리게</li>
+      <li><span class="cap" style="background: var(--red); color: var(--paper)">♥</span>목숨 +1</li>
+    </ul>
+    <div class="controls">
+      <button id="pauseBtn" type="button">일시정지</button>
+      <button id="musicBtn" type="button" aria-pressed="true">음악 켬</button>
+      <button id="soundBtn" type="button" aria-pressed="true">효과음 켬</button>
+    </div>
+  </footer>
+</div>
+
+<script>
+(() => {
+  const W = 480, H = 640, TOP = 14;
+  const cv = document.getElementById('cv');
+  const ctx = cv.getContext('2d');
+  const board = document.getElementById('board');
+  const stageWrap = document.getElementById('stageWrap');
+  const ov = {
+    root: document.getElementById('overlay'),
+    title: document.getElementById('ovTitle'),
+    text: document.getElementById('ovText'),
+    sub: document.getElementById('ovSub'),
+    cta: document.getElementById('ovCta'),
+  };
+  const hud = {
+    score: document.getElementById('score'),
+    hi: document.getElementById('hi'),
+    stage: document.getElementById('stage'),
+    lives: document.getElementById('lives'),
+  };
+  const pauseBtn = document.getElementById('pauseBtn');
+  const soundBtn = document.getElementById('soundBtn');
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // 오방색 기반 벽돌 색
+  const COLORS = { 1: '#c8352e', 2: '#e07a2f', 3: '#e3b23c', 4: '#2a9d8f', 5: '#2f6fb5', 6: '#ece4d0' };
+  const POINTS = { 1: 40, 2: 30, 3: 20, 4: 15, 5: 10, 6: 10, X: 80 };
+  const LEVELS = [
+    { name: '첫 담장', rows: [
+      '1111111111',
+      '2222222222',
+      '3333333333',
+      '4444444444',
+      '5555555555'] },
+    { name: '탑', rows: [
+      '....XX....',
+      '...1111...',
+      '..222222..',
+      '.33333333.',
+      '4444444444',
+      '5555555555'] },
+    { name: '격자', rows: [
+      'X1X1X1X1X1',
+      '2.2.2.2.2.',
+      '.3.3.3.3.3',
+      '4X4X4X4X4X',
+      '5555555555',
+      '6666666666'] },
+    { name: '문살', rows: [
+      '1111111111',
+      '1XX....XX1',
+      '1X.2222.X1',
+      '1X.3XX3.X1',
+      '1X.4444.X1',
+      '1XX....XX1',
+      '5555555555'] },
+    { name: '꽃살', rows: [
+      '..1....1..',
+      '.121..121.',
+      '1232112321',
+      '.343..343.',
+      '..4....4..',
+      'XXXXXXXXXX',
+      '6666666666'] },
+  ];
+  const DROPS = {
+    wide: { label: '넓', color: '#e3b23c', ink: '#141a2e' },
+    multi: { label: '셋', color: '#2a9d8f', ink: '#141a2e' },
+    slow: { label: '느', color: '#2f6fb5', ink: '#efe6d2' },
+    life: { label: '♥', color: '#c8352e', ink: '#efe6d2' },
+  };
+
+  const S = { score: 0, lives: 3, level: 0, hi: 0, state: 'title' };
+  const paddle = { x: W / 2, y: H - 44, h: 12, w: 84, target: W / 2, wideT: 0 };
+  let balls = [], bricks = [], drops = [], parts = [];
+  let slowT = 0, shake = 0, keys = { left: false, right: false };
+  let scale = 1;
+
+  try { S.hi = parseInt(localStorage.getItem('dancheong-hi') || '0', 10) || 0; } catch (e) {}
+
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const fmt = n => n.toLocaleString('ko-KR');
+
+  // ---------- 소리 ----------
+  let audio = null, master = null, soundOn = true;
+  // 브라우저는 사용자 입력 안에서 오디오를 만들거나 resume해야 소리를 낸다
+  function unlockAudio() {
+    try {
+      if (!audio) {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        if (!AC) return;
+        audio = new AC();
+        master = audio.createGain();
+        master.gain.value = 3;
+        master.connect(audio.destination);
+        // iOS Safari 잠금 해제용 무음 버퍼
+        const src = audio.createBufferSource();
+        src.buffer = audio.createBuffer(1, 1, 22050);
+        src.connect(audio.destination);
+        src.start(0);
+      }
+      if (audio.state !== 'running') audio.resume();
+    } catch (e) {}
+  }
+  function sfx(freq, dur = 0.06, type = 'square', vol = 0.04) {
+    if (!soundOn || !audio) return;
+    try {
+      if (audio.state !== 'running') audio.resume();
+      const t = audio.currentTime + 0.005;
+      const o = audio.createOscillator(), g = audio.createGain();
+      o.type = type; o.frequency.setValueAtTime(freq, t);
+      g.gain.setValueAtTime(vol, t);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      o.connect(g).connect(master);
+      o.start(t); o.stop(t + dur + 0.02);
+    } catch (e) {}
+  }
+
+  // ---------- 배경음악: 평조 5음계(솔 라 도 레 미)로 만든 4마디 반복 ----------
+  let musicOn = true, musicGain = null, musicTimer = null, nextNote = 0, step = 0, noiseBuf = null;
+  try { musicOn = localStorage.getItem('dancheong-music') !== 'off'; } catch (e) {}
+  // 8분음표 32칸, 0은 쉼표 (MIDI 번호)
+  const MEL = [72, 0, 74, 76, 74, 0, 72, 69, 67, 0, 69, 72, 69, 0, 0, 0,
+               72, 0, 74, 76, 79, 0, 76, 74, 72, 74, 72, 69, 67, 0, 0, 0];
+  const BASS = [48, 0, 55, 0, 48, 0, 55, 0, 45, 0, 52, 0, 45, 0, 52, 0,
+                48, 0, 55, 0, 48, 0, 55, 0, 43, 0, 50, 0, 43, 0, 50, 0];
+  // 장구 장단 느낌: 덩(1) · 기덕(2)
+  const DRUM = [1, 0, 0, 2, 0, 2, 0, 0];
+  const midi = n => 440 * Math.pow(2, (n - 69) / 12);
+
+  function tone(freq, t, dur, type, vol) {
+    const o = audio.createOscillator(), g = audio.createGain();
+    o.type = type; o.frequency.setValueAtTime(freq, t);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(vol, t + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g).connect(musicGain);
+    o.start(t); o.stop(t + dur + 0.02);
+  }
+
+  function drum(kind, t) {
+    if (kind === 1) {
+      const o = audio.createOscillator(), g = audio.createGain();
+      o.frequency.setValueAtTime(140, t);
+      o.frequency.exponentialRampToValueAtTime(55, t + 0.15);
+      g.gain.setValueAtTime(0.12, t);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.18);
+      o.connect(g).connect(musicGain);
+      o.start(t); o.stop(t + 0.2);
+    } else {
+      if (!noiseBuf) {
+        noiseBuf = audio.createBuffer(1, audio.sampleRate * 0.05, audio.sampleRate);
+        const d = noiseBuf.getChannelData(0);
+        for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+      }
+      const src = audio.createBufferSource(), f = audio.createBiquadFilter(), g = audio.createGain();
+      src.buffer = noiseBuf;
+      f.type = 'highpass'; f.frequency.value = 3000;
+      g.gain.setValueAtTime(0.05, t);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.04);
+      src.connect(f).connect(g).connect(musicGain);
+      src.start(t);
+    }
+  }
+
+  function scheduleMusic() {
+    const bpm = 104 + Math.min(S.level, 6) * 4;
+    const stepDur = 60 / bpm / 2;
+    while (nextNote < audio.currentTime + 0.15) {
+      const i = step % 32;
+      if (MEL[i]) tone(midi(MEL[i]), nextNote, stepDur * 1.8, 'triangle', 0.05);
+      if (BASS[i]) tone(midi(BASS[i]), nextNote, stepDur * 1.6, 'sine', 0.08);
+      if (DRUM[i % 8]) drum(DRUM[i % 8], nextNote);
+      nextNote += stepDur;
+      step++;
+    }
+  }
+
+  function syncMusic() {
+    const want = musicOn && audio && ['play', 'serve', 'cleared'].includes(S.state);
+    if (want && !musicTimer) {
+      if (!musicGain) {
+        musicGain = audio.createGain();
+        musicGain.gain.value = 0.5;
+        musicGain.connect(master);
+      }
+      nextNote = audio.currentTime + 0.05;
+      musicTimer = setInterval(scheduleMusic, 25);
+      scheduleMusic();
+    } else if (!want && musicTimer) {
+      clearInterval(musicTimer);
+      musicTimer = null;
+    }
+  }
+
+  ['pointerdown', 'touchend', 'keydown', 'click'].forEach(ev =>
+    window.addEventListener(ev, unlockAudio, { capture: true, passive: true }));
+
+  // ---------- 화면 맞춤 ----------
+  function fit() {
+    const r = stageWrap.getBoundingClientRect();
+    const sw = r.width / W;
+    const sh = r.height > 200 ? r.height / H : Infinity;
+    const s = Math.min(sw, sh);
+    const cw = Math.floor(W * s), ch = Math.floor(H * s);
+    const dpr = window.devicePixelRatio || 1;
+    cv.style.width = cw + 'px';
+    cv.style.height = ch + 'px';
+    board.style.width = cw + 'px';
+    cv.width = Math.round(cw * dpr);
+    cv.height = Math.round(ch * dpr);
+    scale = (cw / W) * dpr;
+  }
+  window.addEventListener('resize', fit);
+
+  // ---------- 레벨 ----------
+  function baseSpeed() { return Math.min(320 + S.level * 18, 600); }
+
+  function loadLevel(i) {
+    const lv = LEVELS[i % LEVELS.length];
+    const cols = 10, pad = 16, gap = 4, bh = 18, top = 64;
+    const bw = (W - pad * 2 - gap * (cols - 1)) / cols;
+    bricks = [];
+    lv.rows.forEach((row, r) => {
+      [...row].forEach((ch, c) => {
+        if (ch === '.') return;
+        const steel = ch === 'X';
+        bricks.push({
+          x: pad + c * (bw + gap), y: top + r * (bh + gap), w: bw, h: bh,
+          hp: steel ? 2 : 1, max: steel ? 2 : 1,
+          color: steel ? null : COLORS[ch], pts: POINTS[ch], row: r, flash: 0,
+        });
+      });
+    });
+    drops = []; parts = [];
+    paddle.wideT = 0; slowT = 0;
+    serve();
+  }
+
+  function serve() {
+    balls = [{ x: paddle.x, y: paddle.y - 7, r: 7, vx: 0, vy: -1, speed: baseSpeed(), stuck: true }];
+  }
+
+  function launch() {
+    for (const b of balls) {
+      if (!b.stuck) continue;
+      const a = (Math.random() - 0.5) * 0.7;
+      b.vx = Math.sin(a); b.vy = -Math.cos(a); b.stuck = false;
+    }
+    sfx(440, 0.05);
+  }
+
+  function newGame() {
+    S.score = 0; S.lives = 3; S.level = 0;
+    loadLevel(0);
+    updateHud();
+  }
+
+  // ---------- 상태와 오버레이 ----------
+  function setState(st) {
+    S.state = st;
+    syncMusic();
+    pauseBtn.textContent = st === 'paused' ? '계속하기' : '일시정지';
+    const lv = LEVELS[S.level % LEVELS.length];
+    if (st === 'play' || st === 'serve') { ov.root.hidden = true; return; }
+    ov.root.hidden = false;
+    if (st === 'title') {
+      const resumed = S.level > 0 || S.score > 0;
+      ov.title.textContent = '단청 벽돌깨기';
+      ov.text.textContent = resumed
+        ? `스테이지 ${S.level + 1} · ${lv.name}에서 이어서 합니다.`
+        : '마우스나 손가락으로 받침을 움직여 공을 받아내세요. 벽돌을 모두 깨면 다음 스테이지로 넘어갑니다.';
+      ov.sub.textContent = '← → 이동 · 스페이스 발사 · P 일시정지';
+      ov.cta.textContent = resumed ? '클릭해서 이어하기' : '클릭해서 시작';
+    } else if (st === 'paused') {
+      ov.title.textContent = '일시정지';
+      ov.text.textContent = `스테이지 ${S.level + 1} · ${lv.name}`;
+      ov.sub.textContent = `점수 ${fmt(S.score)}`;
+      ov.cta.textContent = '클릭하거나 P로 계속';
+    } else if (st === 'cleared') {
+      ov.title.textContent = `스테이지 ${S.level + 1}`;
+      ov.text.textContent = lv.name + (S.level >= LEVELS.length ? ' · 공이 더 빨라집니다' : '');
+      ov.sub.textContent = `점수 ${fmt(S.score)}`;
+      ov.cta.textContent = '클릭해서 시작';
+    } else if (st === 'over') {
+      ov.title.textContent = '게임 끝';
+      ov.text.textContent = `스테이지 ${S.level + 1}까지 왔습니다.`;
+      ov.sub.textContent = `점수 ${fmt(S.score)} · 최고 ${fmt(S.hi)}`;
+      ov.cta.textContent = '클릭해서 다시 시작';
+    }
+  }
+
+  function action() {
+    switch (S.state) {
+      case 'title':
+      case 'cleared':
+        setState('play'); launch(); break;
+      case 'serve':
+        setState('play'); launch(); break;
+      case 'paused':
+        setState('play'); break;
+      case 'over':
+        newGame(); setState('play'); launch(); break;
+    }
+  }
+
+  function togglePause() {
+    if (S.state === 'play' || S.state === 'serve') { S.prev = S.state; setState('paused'); }
+    else if (S.state === 'paused') setState(S.prev || 'play');
+  }
+
+  function updateHud() {
+    hud.score.textContent = fmt(S.score);
+    hud.hi.textContent = fmt(Math.max(S.hi, S.score));
+    hud.stage.textContent = S.level + 1;
+    hud.lives.textContent = S.lives > 0 ? '●'.repeat(Math.min(S.lives, 6)) + (S.lives > 6 ? '+' : '') : '–';
+  }
+
+  function saveHi() {
+    if (S.score > S.hi) {
+      S.hi = S.score;
+      try { localStorage.setItem('dancheong-hi', String(S.hi)); } catch (e) {}
+    }
+  }
+
+  // ---------- 입력 ----------
+  function pointerX(e) {
+    const r = cv.getBoundingClientRect();
+    return ((e.clientX - r.left) / r.width) * W;
+  }
+  board.addEventListener('pointermove', e => { paddle.target = pointerX(e); });
+  board.addEventListener('pointerdown', e => {
+    paddle.target = pointerX(e);
+    action();
+  });
+
+  window.addEventListener('keydown', e => {
+    const k = e.key;
+    if (k === 'ArrowLeft' || k === 'a' || k === 'A') { keys.left = true; e.preventDefault(); }
+    else if (k === 'ArrowRight' || k === 'd' || k === 'D') { keys.right = true; e.preventDefault(); }
+    else if (k === ' ' || k === 'Enter') {
+      if (e.target.tagName === 'BUTTON') return;
+      e.preventDefault(); action();
+    }
+    else if (k === 'p' || k === 'P' || k === 'Escape') togglePause();
+  });
+  window.addEventListener('keyup', e => {
+    const k = e.key;
+    if (k === 'ArrowLeft' || k === 'a' || k === 'A') keys.left = false;
+    if (k === 'ArrowRight' || k === 'd' || k === 'D') keys.right = false;
+  });
+
+  pauseBtn.addEventListener('click', () => {
+    if (S.state === 'title' || S.state === 'cleared' || S.state === 'over') action();
+    else togglePause();
+  });
+  soundBtn.addEventListener('click', () => {
+    soundOn = !soundOn;
+    soundBtn.textContent = soundOn ? '효과음 켬' : '효과음 끔';
+    soundBtn.setAttribute('aria-pressed', String(soundOn));
+    if (soundOn) { unlockAudio(); sfx(660, 0.08, 'triangle', 0.06); }
+  });
+  const musicBtn = document.getElementById('musicBtn');
+  function renderMusicBtn() {
+    musicBtn.textContent = musicOn ? '음악 켬' : '음악 끔';
+    musicBtn.setAttribute('aria-pressed', String(musicOn));
+  }
+  renderMusicBtn();
+  musicBtn.addEventListener('click', () => {
+    musicOn = !musicOn;
+    try { localStorage.setItem('dancheong-music', musicOn ? 'on' : 'off'); } catch (e) {}
+    renderMusicBtn();
+    unlockAudio();
+    syncMusic();
+  });
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden && (S.state === 'play' || S.state === 'serve')) togglePause();
+  });
+
+  // ---------- 물리 ----------
+  function hitBrick(b) {
+    for (const k of bricks) {
+      if (k.hp <= 0) continue;
+      const cx = clamp(b.x, k.x, k.x + k.w), cy = clamp(b.y, k.y, k.y + k.h);
+      const dx = b.x - cx, dy = b.y - cy;
+      if (dx * dx + dy * dy < b.r * b.r) { damage(k); return true; }
+    }
+    return false;
+  }
+
+  function damage(k) {
+    k.hp--; k.flash = 1;
+    if (k.hp > 0) { sfx(180, 0.07, 'triangle', 0.06); return; }
+    S.score += k.pts;
+    sfx(520 + (6 - k.row) * 40, 0.05);
+    burst(k);
+    if (Math.random() < 0.14) {
+      const r = Math.random();
+      const type = r < 0.08 ? 'life' : r < 0.42 ? 'wide' : r < 0.74 ? 'multi' : 'slow';
+      drops.push({ x: k.x + k.w / 2, y: k.y + k.h / 2, type });
+    }
+    updateHud();
+  }
+
+  function burst(k) {
+    const n = reduceMotion ? 3 : 10;
+    for (let i = 0; i < n; i++) {
+      parts.push({
+        x: k.x + Math.random() * k.w, y: k.y + Math.random() * k.h,
+        vx: (Math.random() - 0.5) * 220, vy: (Math.random() - 0.8) * 200,
+        life: 0.6 + Math.random() * 0.4, color: k.color || '#8a90b8', s: 2 + Math.random() * 3,
+      });
+    }
+    if (!reduceMotion) shake = Math.min(shake + 2, 5);
+  }
+
+  function steer(b) {
+    if (Math.abs(b.vy) < 0.3) b.vy = 0.3 * Math.sign(b.vy || -1);
+    const m = Math.hypot(b.vx, b.vy);
+    b.vx /= m; b.vy /= m;
+  }
+
+  function stepBall(b, dt) {
+    const pw = paddle.w;
+    const dist = b.speed * (slowT > 0 ? 0.65 : 1) * dt;
+    const n = Math.max(1, Math.ceil(dist / 4));
+    const d = dist / n;
+    for (let i = 0; i < n; i++) {
+      b.x += b.vx * d;
+      if (b.x < b.r) { b.x = b.r; b.vx = Math.abs(b.vx); sfx(300, 0.03); }
+      else if (b.x > W - b.r) { b.x = W - b.r; b.vx = -Math.abs(b.vx); sfx(300, 0.03); }
+      if (hitBrick(b)) { b.x -= b.vx * d; b.vx = -b.vx; b.speed = Math.min(b.speed + 2, 640); }
+
+      b.y += b.vy * d;
+      if (b.y < TOP + b.r) { b.y = TOP + b.r; b.vy = Math.abs(b.vy); sfx(300, 0.03); }
+      if (hitBrick(b)) { b.y -= b.vy * d; b.vy = -b.vy; b.speed = Math.min(b.speed + 2, 640); }
+
+      if (b.vy > 0 && b.y + b.r >= paddle.y && b.y - b.r <= paddle.y + paddle.h &&
+          b.x >= paddle.x - pw / 2 - b.r && b.x <= paddle.x + pw / 2 + b.r) {
+        const off = clamp((b.x - paddle.x) / (pw / 2), -1, 1);
+        const ang = off * 1.05;
+        b.vx = Math.sin(ang); b.vy = -Math.cos(ang);
+        b.y = paddle.y - b.r;
+        sfx(220, 0.05);
+      }
+      if (b.y - b.r > H) { b.dead = true; return; }
+    }
+    steer(b);
+  }
+
+  function catchDrop(dp) {
+    sfx(660, 0.08, 'triangle', 0.06);
+    if (dp.type === 'wide') paddle.wideT = 12;
+    else if (dp.type === 'slow') slowT = 9;
+    else if (dp.type === 'life') { S.lives++; updateHud(); }
+    else if (dp.type === 'multi') {
+      const add = [];
+      for (const b of balls) {
+        if (b.stuck) continue;
+        for (const a of [-0.4, 0.4]) {
+          if (balls.length + add.length >= 9) break;
+          const c = Math.cos(a), s = Math.sin(a);
+          add.push({ ...b, vx: b.vx * c - b.vy * s, vy: b.vx * s + b.vy * c });
+        }
+      }
+      balls.push(...add);
+    }
+  }
+
+  function update(dt) {
+    // 받침
+    const kv = (keys.right ? 1 : 0) - (keys.left ? 1 : 0);
+    if (kv) paddle.target = paddle.x + kv * 520 * dt;
+    const goalW = paddle.wideT > 0 ? 136 : 84;
+    paddle.w += (goalW - paddle.w) * Math.min(1, dt * 10);
+    paddle.x = clamp(paddle.target, paddle.w / 2, W - paddle.w / 2);
+    paddle.target = paddle.x;
+
+    // 파편은 항상 움직임
+    for (const p of parts) { p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 520 * dt; p.life -= dt; }
+    parts = parts.filter(p => p.life > 0);
+    for (const k of bricks) if (k.flash > 0) k.flash = Math.max(0, k.flash - dt * 5);
+    shake = Math.max(0, shake - dt * 20);
+
+    if (S.state !== 'play' && S.state !== 'serve' && S.state !== 'title') return;
+
+    for (const b of balls) if (b.stuck) { b.x = paddle.x; b.y = paddle.y - b.r; }
+    if (S.state !== 'play') return;
+
+    paddle.wideT = Math.max(0, paddle.wideT - dt);
+    slowT = Math.max(0, slowT - dt);
+
+    for (const b of balls) if (!b.stuck) stepBall(b, dt);
+    balls = balls.filter(b => !b.dead);
+
+    for (const dp of drops) {
+      dp.y += 150 * dt;
+      if (dp.y + 8 >= paddle.y && dp.y - 8 <= paddle.y + paddle.h &&
+          Math.abs(dp.x - paddle.x) <= paddle.w / 2 + 13) { dp.got = true; catchDrop(dp); }
+    }
+    drops = drops.filter(dp => !dp.got && dp.y < H + 20);
+
+    if (!bricks.some(k => k.hp > 0)) {
+      S.level++;
+      saveHi();
+      sfx(523, 0.12, 'triangle', 0.06); setTimeout(() => sfx(784, 0.16, 'triangle', 0.06), 120);
+      loadLevel(S.level);
+      updateHud();
+      setState('cleared');
+      return;
+    }
+
+    if (balls.length === 0) {
+      S.lives--;
+      sfx(140, 0.3, 'sawtooth', 0.05);
+      drops = []; paddle.wideT = 0; slowT = 0;
+      updateHud();
+      if (S.lives <= 0) { saveHi(); updateHud(); setState('over'); }
+      else { serve(); setState('serve'); }
+    }
+  }
+
+  // ---------- 그리기 ----------
+  function roundRect(x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+
+  function drawBackground() {
+    ctx.fillStyle = '#161c33';
+    ctx.fillRect(0, 0, W, H);
+    // 한지 같은 점 무늬
+    ctx.fillStyle = 'rgba(239,230,210,0.04)';
+    for (let y = 24; y < H; y += 20) for (let x = 10; x < W; x += 20) ctx.fillRect(x, y, 1.5, 1.5);
+    // 단청 머리초 띠
+    const band = ['#2a9d8f', '#c8352e', '#e3b23c', '#2f6fb5', '#ece4d0', '#c8352e'];
+    const seg = 16;
+    for (let i = 0; i * seg < W; i++) {
+      ctx.fillStyle = band[i % band.length];
+      ctx.fillRect(i * seg, 0, seg, 8);
+    }
+    ctx.fillStyle = '#0f1426';
+    ctx.fillRect(0, 8, W, 3);
+    for (let i = 0; i * seg < W; i++) {
+      ctx.fillStyle = 'rgba(239,230,210,0.5)';
+      ctx.beginPath();
+      ctx.arc(i * seg + seg / 2, 4, 2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  function drawBricks() {
+    for (const k of bricks) {
+      if (k.hp <= 0) continue;
+      if (k.max > 1) {
+        ctx.fillStyle = '#3a4170';
+        ctx.fillRect(k.x, k.y, k.w, k.h);
+        ctx.strokeStyle = '#e3b23c';
+        ctx.lineWidth = 1.5;
+        ctx.strokeRect(k.x + 1.5, k.y + 1.5, k.w - 3, k.h - 3);
+        if (k.hp === 1) {
+          ctx.strokeStyle = 'rgba(239,230,210,0.55)';
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(k.x + k.w * 0.3, k.y + 2);
+          ctx.lineTo(k.x + k.w * 0.45, k.y + k.h * 0.55);
+          ctx.lineTo(k.x + k.w * 0.38, k.y + k.h - 2);
+          ctx.moveTo(k.x + k.w * 0.45, k.y + k.h * 0.55);
+          ctx.lineTo(k.x + k.w * 0.7, k.y + k.h * 0.4);
+          ctx.stroke();
+        }
+      } else {
+        ctx.fillStyle = k.color;
+        ctx.fillRect(k.x, k.y, k.w, k.h);
+      }
+      ctx.fillStyle = 'rgba(255,255,255,0.22)';
+      ctx.fillRect(k.x, k.y, k.w, 3);
+      ctx.fillStyle = 'rgba(0,0,0,0.25)';
+      ctx.fillRect(k.x, k.y + k.h - 3, k.w, 3);
+      if (k.flash > 0) {
+        ctx.fillStyle = `rgba(255,255,255,${k.flash * 0.6})`;
+        ctx.fillRect(k.x, k.y, k.w, k.h);
+      }
+    }
+  }
+
+  function drawPaddle() {
+    const x = paddle.x - paddle.w / 2, y = paddle.y;
+    roundRect(x, y, paddle.w, paddle.h, 6);
+    ctx.fillStyle = paddle.wideT > 0 ? '#e3b23c' : '#efe6d2';
+    ctx.fill();
+    ctx.fillStyle = '#c8352e';
+    ctx.fillRect(paddle.x - 6, y + 3, 12, paddle.h - 6);
+    if (paddle.wideT > 0 && paddle.wideT < 3 && Math.floor(paddle.wideT * 6) % 2 === 0) {
+      roundRect(x, y, paddle.w, paddle.h, 6);
+      ctx.fillStyle = 'rgba(239,230,210,0.5)';
+      ctx.fill();
+    }
+  }
+
+  function drawBalls() {
+    for (const b of balls) {
+      ctx.beginPath();
+      ctx.arc(b.x, b.y, b.r + 4, 0, Math.PI * 2);
+      ctx.fillStyle = slowT > 0 ? 'rgba(47,111,181,0.35)' : 'rgba(239,230,210,0.12)';
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);
+      ctx.fillStyle = '#efe6d2';
+      ctx.fill();
+    }
+  }
+
+  function drawDrops() {
+    ctx.font = '600 11px "IBM Plex Sans KR", "Apple SD Gothic Neo", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    for (const dp of drops) {
+      const d = DROPS[dp.type];
+      roundRect(dp.x - 13, dp.y - 8, 26, 16, 8);
+      ctx.fillStyle = d.color;
+      ctx.fill();
+      ctx.fillStyle = d.ink;
+      ctx.fillText(d.label, dp.x, dp.y + 0.5);
+    }
+  }
+
+  function drawParts() {
+    for (const p of parts) {
+      ctx.globalAlpha = Math.max(0, Math.min(1, p.life * 1.6));
+      ctx.fillStyle = p.color;
+      ctx.fillRect(p.x, p.y, p.s, p.s);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  function drawHints() {
+    ctx.font = '500 12px "IBM Plex Mono", ui-monospace, monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'alphabetic';
+    if (S.state === 'serve') {
+      ctx.fillStyle = 'rgba(239,230,210,0.75)';
+      ctx.fillText('클릭 또는 스페이스로 발사', W / 2, paddle.y - 30);
+    }
+    // 남은 효과 시간
+    const tags = [];
+    if (paddle.wideT > 0) tags.push(['넓게 ' + Math.ceil(paddle.wideT) + 's', '#e3b23c']);
+    if (slowT > 0) tags.push(['느리게 ' + Math.ceil(slowT) + 's', '#6d9fdb']);
+    ctx.textAlign = 'left';
+    tags.forEach(([t, c], i) => { ctx.fillStyle = c; ctx.fillText(t, 12 + i * 90, H - 12); });
+  }
+
+  function draw() {
+    ctx.setTransform(scale, 0, 0, scale, 0, 0);
+    if (shake > 0) ctx.translate((Math.random() - 0.5) * shake, (Math.random() - 0.5) * shake);
+    drawBackground();
+    drawBricks();
+    drawParts();
+    drawDrops();
+    drawPaddle();
+    drawBalls();
+    drawHints();
+  }
+
+  let last = 0;
+  function loop(t) {
+    const dt = Math.min(1 / 30, (t - last) / 1000 || 0);
+    last = t;
+    update(dt);
+    draw();
+    requestAnimationFrame(loop);
+  }
+
+  // ---------- 시작 ----------
+  window.claude?.hot?.snapshot?.(() => ({ score: S.score, lives: S.lives, level: S.level }));
+
+  function start(data) {
+    if (data && typeof data.level === 'number' && data.lives > 0) {
+      S.score = data.score || 0; S.lives = data.lives; S.level = data.level;
+    }
+    fit();
+    loadLevel(S.level);
+    updateHud();
+    setState('title');
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(fit);
+    requestAnimationFrame(loop);
+  }
+
+  window.claude?.hot?.ready ? window.claude.hot.ready(start) : start(window.claude?.hot?.data ?? {});
+})();
+</script>
+</body>
+</html>
