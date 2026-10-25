@@ -30,6 +30,7 @@
     --red: #c8352e;
     --teal: #2a9d8f;
     --blue: #2f6fb5;
+    --plum: #a64d8f;
     --display: "Black Han Sans", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
     --body: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
     --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
@@ -147,6 +148,7 @@
       <li><span class="cap" style="background: var(--gold)">넓</span>받침 넓게</li>
       <li><span class="cap" style="background: var(--teal)">셋</span>공 셋으로</li>
       <li><span class="cap" style="background: var(--blue); color: var(--paper)">느</span>공 느리게</li>
+      <li><span class="cap" style="background: var(--plum); color: var(--paper)">레</span>레이저</li>
       <li><span class="cap" style="background: var(--red); color: var(--paper)">♥</span>목숨 +1</li>
     </ul>
     <div class="controls">
@@ -187,7 +189,8 @@
 
   // 오방색 기반 벽돌 색
   const COLORS = { 1: '#c8352e', 2: '#e07a2f', 3: '#e3b23c', 4: '#2a9d8f', 5: '#2f6fb5', 6: '#ece4d0' };
-  const POINTS = { 1: 40, 2: 30, 3: 20, 4: 15, 5: 10, 6: 10, X: 80 };
+  const POINTS = { 1: 40, 2: 30, 3: 20, 4: 15, 5: 10, 6: 10, X: 80, Y: 120 };
+  // 숫자 = 색 벽돌(1번), X = 철벽돌(2번), Y = 겹철벽돌(3번), . = 빈칸
   const LEVELS = [
     { name: '첫 담장', rows: [
       '1111111111',
@@ -225,18 +228,175 @@
       '..4....4..',
       'XXXXXXXXXX',
       '6666666666'] },
+    { name: '계단', rows: [
+      '1.........',
+      '21........',
+      '321.......',
+      '4321......',
+      '54321.....',
+      '654321....',
+      'X654321...',
+      'XX654321..'] },
+    { name: '다리', rows: [
+      'XXXXXXXXXX',
+      '1........1',
+      '12......21',
+      '123....321',
+      '1234..4321',
+      '5555555555'] },
+    { name: '창살', rows: [
+      '1.2.3.4.5.',
+      '1.2.3.4.5.',
+      '1.2.3.4.5.',
+      '1.2.3.4.5.',
+      'X.X.X.X.X.',
+      '6666666666'] },
+    { name: '물결', rows: [
+      '11......11',
+      '.22....22.',
+      '..333333..',
+      '...4444...',
+      '55......55',
+      '.66....66.',
+      '..XXXXXX..'] },
+    { name: '기와', rows: [
+      '....11....',
+      '...1221...',
+      '..122221..',
+      '.12233221.',
+      '1223443221',
+      'XXXXXXXXXX',
+      '5.5.5.5.5.'] },
+    { name: '바둑판', rows: [
+      '1X1X1X1X1X',
+      'X2X2X2X2X2',
+      '3X3X3X3X3X',
+      'X4X4X4X4X4',
+      '5X5X5X5X5X'] },
+    { name: '연꽃', rows: [
+      '....33....',
+      '...3443...',
+      '.1.3443.1.',
+      '121.33.121',
+      '1221..1221',
+      '.122..221.',
+      '..444444..',
+      '...6666...'] },
+    { name: '성곽', rows: [
+      'X.X.XX.X.X',
+      'XXXXXXXXXX',
+      '1111111111',
+      '2222222222',
+      '3333..3333',
+      '333....333'] },
+    { name: '별', rows: [
+      '....11....',
+      '....11....',
+      '1111221111',
+      '.12233221.',
+      '..123321..',
+      '.12.33.21.',
+      '12......21'] },
+    { name: '단청 띠', rows: [
+      'YYYYYYYYYY',
+      '1212121212',
+      '3434343434',
+      '5656565656',
+      '1212121212',
+      '3434343434'] },
+    { name: '대문', rows: [
+      'YYYYYYYYYY',
+      'Y11111111Y',
+      'Y12222221Y',
+      'Y12....21Y',
+      'Y12....21Y',
+      'Y12....21Y',
+      '..........',
+      '5555555555'] },
+    { name: '눈송이', rows: [
+      'X...11...X',
+      '.X..22..X.',
+      '..X3333X..',
+      '1234554321',
+      '..X3333X..',
+      '.X..22..X.',
+      'X...11...X'] },
+    { name: '용', rows: [
+      'Y........Y',
+      'YY111111YY',
+      '..222222..',
+      'YY333333YY',
+      '..444444..',
+      'YY555555YY',
+      '..666666..',
+      'YYYYYYYYYY'] },
+    { name: '미로', rows: [
+      'YXXXXXXXXY',
+      '1........1',
+      '1.XXXXXX.1',
+      '2.3....3.2',
+      '2.3.44.3.2',
+      '2.3....3.2',
+      '1.XXXXXX.1',
+      '1........1'] },
+    { name: '마지막 단청', rows: [
+      'YYYYYYYYYY',
+      '1234565432',
+      'Y1Y2Y3Y4Y5',
+      '2345654321',
+      'X6X5X4X3X2',
+      '3456543212',
+      'YYYY..YYYY'] },
   ];
+
+  // 21스테이지부터는 스테이지 번호로 정해지는 좌우대칭 무늬를 끝없이 만든다
+  const GEN_NAMES = ['바람', '구름', '산', '달', '해', '물', '불', '나무', '쇠', '흙', '학', '거북', '소나무', '매화', '대나무'];
+  function genLevel(i) {
+    let seed = (i + 1) * 9973;
+    const rnd = () => {
+      seed = (seed + 0x6D2B79F5) | 0;
+      let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+    const extra = i - LEVELS.length;
+    const pSteel = Math.min(0.06 + extra * 0.006, 0.2);
+    const pTriple = Math.min(0.03 + extra * 0.004, 0.12);
+    const nRows = 6 + Math.floor(rnd() * 3);
+    const shift = Math.floor(rnd() * 6);
+    const rows = [];
+    let breakable = 0;
+    for (let r = 0; r < nRows; r++) {
+      const half = [];
+      for (let c = 0; c < 5; c++) {
+        const v = rnd();
+        let ch;
+        if (v < 0.22) ch = '.';
+        else if (v < 0.22 + pTriple) ch = 'Y';
+        else if (v < 0.22 + pTriple + pSteel) ch = 'X';
+        else ch = String(((r + shift) % 6) + 1);
+        if (ch !== '.') breakable += 2;
+        half.push(ch);
+      }
+      rows.push(half.join('') + half.slice().reverse().join(''));
+    }
+    if (breakable < 30) rows.push('5555555555', '6666666666');
+    return { name: `${GEN_NAMES[extra % GEN_NAMES.length]} 무늬`, rows };
+  }
+  const getLevel = i => (i < LEVELS.length ? LEVELS[i] : genLevel(i));
   const DROPS = {
     wide: { label: '넓', color: '#e3b23c', ink: '#141a2e' },
     multi: { label: '셋', color: '#2a9d8f', ink: '#141a2e' },
     slow: { label: '느', color: '#2f6fb5', ink: '#efe6d2' },
     life: { label: '♥', color: '#c8352e', ink: '#efe6d2' },
+    laser: { label: '레', color: '#a64d8f', ink: '#efe6d2' },
   };
 
   const S = { score: 0, lives: 3, level: 0, hi: 0, state: 'title' };
   const paddle = { x: W / 2, y: H - 44, h: 12, w: 84, target: W / 2, wideT: 0 };
   let balls = [], bricks = [], drops = [], parts = [];
   let slowT = 0, shake = 0, keys = { left: false, right: false };
+  let laserT = 0, laserCd = 0, lasers = [];
   let scale = 1;
 
   try { S.hi = parseInt(localStorage.getItem('dancheong-hi') || '0', 10) || 0; } catch (e) {}
@@ -327,7 +487,7 @@
   }
 
   function scheduleMusic() {
-    const bpm = 104 + Math.min(S.level, 6) * 4;
+    const bpm = 104 + Math.min(S.level, 15) * 2;
     const stepDur = 60 / bpm / 2;
     while (nextNote < audio.currentTime + 0.15) {
       const i = step % 32;
@@ -379,26 +539,27 @@
   window.addEventListener('resize', fit);
 
   // ---------- 레벨 ----------
-  function baseSpeed() { return Math.min(320 + S.level * 18, 600); }
+  function baseSpeed() { return Math.min(320 + S.level * 10, 600); }
 
   function loadLevel(i) {
-    const lv = LEVELS[i % LEVELS.length];
+    const lv = getLevel(i);
     const cols = 10, pad = 16, gap = 4, bh = 18, top = 64;
     const bw = (W - pad * 2 - gap * (cols - 1)) / cols;
     bricks = [];
     lv.rows.forEach((row, r) => {
       [...row].forEach((ch, c) => {
         if (ch === '.') return;
-        const steel = ch === 'X';
+        const steel = ch === 'X' || ch === 'Y';
+        const hp = ch === 'Y' ? 3 : ch === 'X' ? 2 : 1;
         bricks.push({
           x: pad + c * (bw + gap), y: top + r * (bh + gap), w: bw, h: bh,
-          hp: steel ? 2 : 1, max: steel ? 2 : 1,
+          hp, max: hp,
           color: steel ? null : COLORS[ch], pts: POINTS[ch], row: r, flash: 0,
         });
       });
     });
-    drops = []; parts = [];
-    paddle.wideT = 0; slowT = 0;
+    drops = []; parts = []; lasers = [];
+    paddle.wideT = 0; slowT = 0; laserT = 0;
     serve();
   }
 
@@ -427,7 +588,7 @@
     syncMusic();
     syncWake();
     pauseBtn.textContent = st === 'paused' ? '계속하기' : '일시정지';
-    const lv = LEVELS[S.level % LEVELS.length];
+    const lv = getLevel(S.level);
     if (st === 'play' || st === 'serve') { ov.root.hidden = true; return; }
     ov.root.hidden = false;
     if (st === 'title') {
@@ -447,7 +608,7 @@
       ov.cta.textContent = touchMode ? '탭해서 계속' : '클릭하거나 P로 계속';
     } else if (st === 'cleared') {
       ov.title.textContent = `스테이지 ${S.level + 1}`;
-      ov.text.textContent = lv.name + (S.level >= LEVELS.length ? ' · 공이 더 빨라집니다' : '');
+      ov.text.textContent = lv.name + (S.level === LEVELS.length ? ' · 지금부터는 끝없이 새 무늬가 나옵니다' : '');
       ov.sub.textContent = `점수 ${fmt(S.score)}`;
       ov.cta.textContent = `${tap()}해서 시작`;
     } else if (st === 'over') {
@@ -607,7 +768,7 @@
     burst(k);
     if (Math.random() < 0.14) {
       const r = Math.random();
-      const type = r < 0.08 ? 'life' : r < 0.42 ? 'wide' : r < 0.74 ? 'multi' : 'slow';
+      const type = r < 0.07 ? 'life' : r < 0.32 ? 'wide' : r < 0.56 ? 'multi' : r < 0.76 ? 'laser' : 'slow';
       drops.push({ x: k.x + k.w / 2, y: k.y + k.h / 2, type });
     }
     updateHud();
@@ -663,6 +824,7 @@
     sfx(660, 0.08, 'triangle', 0.06);
     if (dp.type === 'wide') paddle.wideT = 12;
     else if (dp.type === 'slow') slowT = 9;
+    else if (dp.type === 'laser') laserT = 10;
     else if (dp.type === 'life') { S.lives++; updateHud(); }
     else if (dp.type === 'multi') {
       const add = [];
@@ -704,6 +866,29 @@
     for (const b of balls) if (!b.stuck) stepBall(b, dt);
     balls = balls.filter(b => !b.dead);
 
+    // 레이저: 받침 양 끝 포구에서 자동 발사
+    laserT = Math.max(0, laserT - dt);
+    if (laserT > 0) {
+      laserCd -= dt;
+      if (laserCd <= 0) {
+        laserCd = 0.3;
+        lasers.push({ x: paddle.x - paddle.w / 2 + 7, y: paddle.y - 14 },
+                    { x: paddle.x + paddle.w / 2 - 7, y: paddle.y - 14 });
+        sfx(1250, 0.04, 'sawtooth', 0.015);
+      }
+    }
+    for (const lz of lasers) {
+      const prevY = lz.y;
+      lz.y -= 720 * dt;
+      if (lz.y < TOP) { lz.dead = true; continue; }
+      // 한 프레임에 지나간 구간 전체를 검사해서 벽돌을 건너뛰지 않게
+      for (const k of bricks) {
+        if (k.hp <= 0 || lz.x < k.x || lz.x > k.x + k.w) continue;
+        if (lz.y <= k.y + k.h && prevY + 14 >= k.y) { damage(k); lz.dead = true; break; }
+      }
+    }
+    lasers = lasers.filter(lz => !lz.dead);
+
     for (const dp of drops) {
       dp.y += 150 * dt;
       if (dp.y + 8 >= paddle.y && dp.y - 8 <= paddle.y + paddle.h &&
@@ -726,7 +911,7 @@
       S.lives--;
       sfx(140, 0.3, 'sawtooth', 0.05);
       buzz(120);
-      drops = []; paddle.wideT = 0; slowT = 0;
+      drops = []; lasers = []; paddle.wideT = 0; slowT = 0; laserT = 0;
       updateHud();
       if (S.lives <= 0) { saveHi(); updateHud(); setState('over'); }
       else { serve(); setState('serve'); }
@@ -771,20 +956,29 @@
     for (const k of bricks) {
       if (k.hp <= 0) continue;
       if (k.max > 1) {
-        ctx.fillStyle = '#3a4170';
+        ctx.fillStyle = k.max === 3 ? '#262b52' : '#3a4170';
         ctx.fillRect(k.x, k.y, k.w, k.h);
         ctx.strokeStyle = '#e3b23c';
         ctx.lineWidth = 1.5;
         ctx.strokeRect(k.x + 1.5, k.y + 1.5, k.w - 3, k.h - 3);
-        if (k.hp === 1) {
-          ctx.strokeStyle = 'rgba(239,230,210,0.55)';
-          ctx.lineWidth = 1;
+        if (k.max === 3) ctx.strokeRect(k.x + 4.5, k.y + 4.5, k.w - 9, k.h - 9);
+        const hits = k.max - k.hp;
+        ctx.strokeStyle = 'rgba(239,230,210,0.55)';
+        ctx.lineWidth = 1;
+        if (hits >= 1) {
           ctx.beginPath();
           ctx.moveTo(k.x + k.w * 0.3, k.y + 2);
           ctx.lineTo(k.x + k.w * 0.45, k.y + k.h * 0.55);
           ctx.lineTo(k.x + k.w * 0.38, k.y + k.h - 2);
           ctx.moveTo(k.x + k.w * 0.45, k.y + k.h * 0.55);
           ctx.lineTo(k.x + k.w * 0.7, k.y + k.h * 0.4);
+          ctx.stroke();
+        }
+        if (hits >= 2) {
+          ctx.beginPath();
+          ctx.moveTo(k.x + k.w * 0.75, k.y + k.h - 2);
+          ctx.lineTo(k.x + k.w * 0.62, k.y + k.h * 0.45);
+          ctx.lineTo(k.x + k.w * 0.85, k.y + 2);
           ctx.stroke();
         }
       } else {
@@ -809,6 +1003,11 @@
     ctx.fill();
     ctx.fillStyle = '#c8352e';
     ctx.fillRect(paddle.x - 6, y + 3, 12, paddle.h - 6);
+    if (laserT > 0) {
+      ctx.fillStyle = '#a64d8f';
+      ctx.fillRect(x + 3, y - 8, 8, 10);
+      ctx.fillRect(x + paddle.w - 11, y - 8, 8, 10);
+    }
     if (paddle.wideT > 0 && paddle.wideT < 3 && Math.floor(paddle.wideT * 6) % 2 === 0) {
       roundRect(x, y, paddle.w, paddle.h, 6);
       ctx.fillStyle = 'rgba(239,230,210,0.5)';
@@ -826,6 +1025,15 @@
       ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);
       ctx.fillStyle = '#efe6d2';
       ctx.fill();
+    }
+  }
+
+  function drawLasers() {
+    for (const lz of lasers) {
+      ctx.fillStyle = 'rgba(214,138,192,0.35)';
+      ctx.fillRect(lz.x - 3, lz.y, 6, 14);
+      ctx.fillStyle = '#f6d4ec';
+      ctx.fillRect(lz.x - 1, lz.y, 2, 14);
     }
   }
 
@@ -864,6 +1072,7 @@
     const tags = [];
     if (paddle.wideT > 0) tags.push(['넓게 ' + Math.ceil(paddle.wideT) + 's', '#e3b23c']);
     if (slowT > 0) tags.push(['느리게 ' + Math.ceil(slowT) + 's', '#6d9fdb']);
+    if (laserT > 0) tags.push(['레이저 ' + Math.ceil(laserT) + 's', '#d48ac0']);
     ctx.textAlign = 'left';
     tags.forEach(([t, c], i) => { ctx.fillStyle = c; ctx.fillText(t, 12 + i * 110, H - 12); });
   }
@@ -874,6 +1083,7 @@
     drawBackground();
     drawBricks();
     drawParts();
+    drawLasers();
     drawDrops();
     drawPaddle();
     drawBalls();
