@@ -2,7 +2,12 @@
 <html lang="ko">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#141a2e">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="단청 벽돌깨기">
 <style>
   :root { padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
   body { margin: 0; font: 14px system-ui, sans-serif; }
@@ -30,9 +35,14 @@
     --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
     color-scheme: dark;
   }
-  html { box-sizing: border-box; height: 100%; background: var(--ink); }
+  html { box-sizing: border-box; height: 100%; background: var(--ink); overscroll-behavior: none; }
   *, *::before, *::after { box-sizing: inherit; }
-  body { height: 100%; background: var(--ink); color: var(--paper); font-family: var(--body); }
+  body {
+    height: 100%; background: var(--ink); color: var(--paper); font-family: var(--body);
+    overscroll-behavior: none; touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent; -webkit-user-select: none; user-select: none;
+    -webkit-touch-callout: none;
+  }
 
   .app {
     height: 100%;
@@ -56,8 +66,9 @@
   .hud dd { margin: 0; font-family: var(--mono); font-size: 1rem; font-variant-numeric: tabular-nums; }
   #lives { color: var(--red); letter-spacing: .1em; }
 
-  .stage { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; }
-  .board { position: relative; touch-action: none; cursor: none; }
+  .stage { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; touch-action: none; }
+  .board { position: relative; touch-action: none; }
+  @media (pointer: fine) { .board { cursor: none; } }
   canvas { display: block; border-radius: 4px; box-shadow: 0 0 0 1px var(--line), 0 18px 40px -20px rgba(0,0,0,.6); }
 
   .overlay {
@@ -87,9 +98,22 @@
   button:hover { border-color: var(--muted); }
   button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
 
-  @media (max-width: 420px) {
-    h1 { font-size: 1.4rem; }
-    .hud { gap: 12px; }
+  @media (max-width: 520px) {
+    .app { gap: 8px; padding-block: 8px; }
+    header { flex-wrap: nowrap; align-items: center; }
+    h1 { font-size: 1.15rem; white-space: nowrap; }
+    .hud { gap: 10px; }
+    .hud dt { font-size: .62rem; }
+    .hud dd { font-size: .88rem; }
+    .legend { font-size: .72rem; gap: 4px 10px; }
+    .controls { width: 100%; }
+    .controls button { flex: 1; min-height: 42px; font-size: .85rem; }
+  }
+  @media (max-width: 360px) {
+    h1 span { display: none; }
+  }
+  @media (max-height: 620px) and (pointer: coarse) {
+    .legend { display: none; }
   }
 </style>
 
@@ -135,7 +159,8 @@
 
 <script>
 (() => {
-  const W = 480, H = 640, TOP = 14;
+  const W = 480, TOP = 14;
+  let H = 640; // 세로로 긴 휴대폰 화면에서는 판을 아래로 늘린다
   const cv = document.getElementById('cv');
   const ctx = cv.getContext('2d');
   const board = document.getElementById('board');
@@ -156,6 +181,9 @@
   const pauseBtn = document.getElementById('pauseBtn');
   const soundBtn = document.getElementById('soundBtn');
   const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let touchMode = window.matchMedia('(pointer: coarse)').matches;
+  const tap = () => (touchMode ? '탭' : '클릭');
+  function buzz(ms) { try { navigator.vibrate && navigator.vibrate(ms); } catch (e) {} }
 
   // 오방색 기반 벽돌 색
   const COLORS = { 1: '#c8352e', 2: '#e07a2f', 3: '#e3b23c', 4: '#2a9d8f', 5: '#2f6fb5', 6: '#ece4d0' };
@@ -334,6 +362,8 @@
   // ---------- 화면 맞춤 ----------
   function fit() {
     const r = stageWrap.getBoundingClientRect();
+    H = r.height > 200 && r.width > 0 ? Math.round(clamp((W * r.height) / r.width, 640, 880)) : 640;
+    paddle.y = H - 44;
     const sw = r.width / W;
     const sh = r.height > 200 ? r.height / H : Infinity;
     const s = Math.min(sw, sh);
@@ -373,7 +403,7 @@
   }
 
   function serve() {
-    balls = [{ x: paddle.x, y: paddle.y - 7, r: 7, vx: 0, vy: -1, speed: baseSpeed(), stuck: true }];
+    balls = [{ x: paddle.x, y: paddle.y - 8, r: 8, vx: 0, vy: -1, speed: baseSpeed(), stuck: true }];
   }
 
   function launch() {
@@ -395,6 +425,7 @@
   function setState(st) {
     S.state = st;
     syncMusic();
+    syncWake();
     pauseBtn.textContent = st === 'paused' ? '계속하기' : '일시정지';
     const lv = LEVELS[S.level % LEVELS.length];
     if (st === 'play' || st === 'serve') { ov.root.hidden = true; return; }
@@ -404,24 +435,26 @@
       ov.title.textContent = '단청 벽돌깨기';
       ov.text.textContent = resumed
         ? `스테이지 ${S.level + 1} · ${lv.name}에서 이어서 합니다.`
-        : '마우스나 손가락으로 받침을 움직여 공을 받아내세요. 벽돌을 모두 깨면 다음 스테이지로 넘어갑니다.';
-      ov.sub.textContent = '← → 이동 · 스페이스 발사 · P 일시정지';
-      ov.cta.textContent = resumed ? '클릭해서 이어하기' : '클릭해서 시작';
+        : touchMode
+          ? '화면 아무 곳이나 좌우로 밀어 받침을 움직이세요. 벽돌을 모두 깨면 다음 스테이지로 넘어갑니다.'
+          : '마우스로 받침을 움직여 공을 받아내세요. 벽돌을 모두 깨면 다음 스테이지로 넘어갑니다.';
+      ov.sub.textContent = touchMode ? '밀어서 이동 · 탭해서 발사' : '← → 이동 · 스페이스 발사 · P 일시정지';
+      ov.cta.textContent = resumed ? `${tap()}해서 이어하기` : `${tap()}해서 시작`;
     } else if (st === 'paused') {
       ov.title.textContent = '일시정지';
       ov.text.textContent = `스테이지 ${S.level + 1} · ${lv.name}`;
       ov.sub.textContent = `점수 ${fmt(S.score)}`;
-      ov.cta.textContent = '클릭하거나 P로 계속';
+      ov.cta.textContent = touchMode ? '탭해서 계속' : '클릭하거나 P로 계속';
     } else if (st === 'cleared') {
       ov.title.textContent = `스테이지 ${S.level + 1}`;
       ov.text.textContent = lv.name + (S.level >= LEVELS.length ? ' · 공이 더 빨라집니다' : '');
       ov.sub.textContent = `점수 ${fmt(S.score)}`;
-      ov.cta.textContent = '클릭해서 시작';
+      ov.cta.textContent = `${tap()}해서 시작`;
     } else if (st === 'over') {
       ov.title.textContent = '게임 끝';
       ov.text.textContent = `스테이지 ${S.level + 1}까지 왔습니다.`;
       ov.sub.textContent = `점수 ${fmt(S.score)} · 최고 ${fmt(S.hi)}`;
-      ov.cta.textContent = '클릭해서 다시 시작';
+      ov.cta.textContent = `${tap()}해서 다시 시작`;
     }
   }
 
@@ -463,11 +496,54 @@
     const r = cv.getBoundingClientRect();
     return ((e.clientX - r.left) / r.width) * W;
   }
-  board.addEventListener('pointermove', e => { paddle.target = pointerX(e); });
-  board.addEventListener('pointerdown', e => {
-    paddle.target = pointerX(e);
-    action();
+  // 마우스: 커서 위치로 받침 이동. 터치: 손가락이 받침을 가리지 않게 화면 어디서든 밀면 상대 이동
+  const isTouch = e => e.pointerType === 'touch' || e.pointerType === 'pen';
+  let drag = null;
+  stageWrap.addEventListener('pointerdown', e => {
+    if (isTouch(e)) {
+      if (!touchMode) { touchMode = true; setState(S.state); }
+      drag = { id: e.pointerId, lastX: e.clientX, moved: 0 };
+      try { stageWrap.setPointerCapture(e.pointerId); } catch (err) {}
+      // 오버레이 화면은 바로 반응, 발사 대기 중에는 손을 뗄 때 발사(받침 위치를 먼저 잡을 수 있게)
+      if (S.state !== 'play' && S.state !== 'serve') action();
+    } else {
+      paddle.target = pointerX(e);
+      action();
+    }
   });
+  stageWrap.addEventListener('pointermove', e => {
+    if (drag && e.pointerId === drag.id) {
+      const r = cv.getBoundingClientRect();
+      const dxPx = e.clientX - drag.lastX;
+      paddle.target += (dxPx / r.width) * W * 1.4;
+      drag.moved += Math.abs(dxPx);
+      drag.lastX = e.clientX;
+    } else if (!isTouch(e)) {
+      paddle.target = pointerX(e);
+    }
+  });
+  const endDrag = e => {
+    if (!drag || e.pointerId !== drag.id) return;
+    if (e.type === 'pointerup' && S.state === 'serve' && drag.moved < 14) action();
+    drag = null;
+  };
+  stageWrap.addEventListener('pointerup', endDrag);
+  stageWrap.addEventListener('pointercancel', endDrag);
+  stageWrap.addEventListener('contextmenu', e => e.preventDefault());
+
+  // 플레이 중에는 화면이 꺼지지 않게
+  let wakeLock = null;
+  async function syncWake() {
+    const want = S.state === 'play' || S.state === 'serve';
+    try {
+      if (want && !wakeLock && navigator.wakeLock) {
+        wakeLock = await navigator.wakeLock.request('screen');
+        wakeLock.addEventListener('release', () => { wakeLock = null; });
+      } else if (!want && wakeLock) {
+        const w = wakeLock; wakeLock = null; await w.release();
+      }
+    } catch (e) {}
+  }
 
   window.addEventListener('keydown', e => {
     const k = e.key;
@@ -631,7 +707,7 @@
     for (const dp of drops) {
       dp.y += 150 * dt;
       if (dp.y + 8 >= paddle.y && dp.y - 8 <= paddle.y + paddle.h &&
-          Math.abs(dp.x - paddle.x) <= paddle.w / 2 + 13) { dp.got = true; catchDrop(dp); }
+          Math.abs(dp.x - paddle.x) <= paddle.w / 2 + 16) { dp.got = true; catchDrop(dp); }
     }
     drops = drops.filter(dp => !dp.got && dp.y < H + 20);
 
@@ -639,6 +715,7 @@
       S.level++;
       saveHi();
       sfx(523, 0.12, 'triangle', 0.06); setTimeout(() => sfx(784, 0.16, 'triangle', 0.06), 120);
+      buzz([20, 40, 20]);
       loadLevel(S.level);
       updateHud();
       setState('cleared');
@@ -648,6 +725,7 @@
     if (balls.length === 0) {
       S.lives--;
       sfx(140, 0.3, 'sawtooth', 0.05);
+      buzz(120);
       drops = []; paddle.wideT = 0; slowT = 0;
       updateHud();
       if (S.lives <= 0) { saveHi(); updateHud(); setState('over'); }
@@ -752,12 +830,12 @@
   }
 
   function drawDrops() {
-    ctx.font = '600 11px "IBM Plex Sans KR", "Apple SD Gothic Neo", sans-serif';
+    ctx.font = '600 13px "IBM Plex Sans KR", "Apple SD Gothic Neo", sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     for (const dp of drops) {
       const d = DROPS[dp.type];
-      roundRect(dp.x - 13, dp.y - 8, 26, 16, 8);
+      roundRect(dp.x - 16, dp.y - 10, 32, 20, 10);
       ctx.fillStyle = d.color;
       ctx.fill();
       ctx.fillStyle = d.ink;
@@ -775,19 +853,19 @@
   }
 
   function drawHints() {
-    ctx.font = '500 12px "IBM Plex Mono", ui-monospace, monospace';
+    ctx.font = '500 15px "IBM Plex Sans KR", "Apple SD Gothic Neo", sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'alphabetic';
     if (S.state === 'serve') {
       ctx.fillStyle = 'rgba(239,230,210,0.75)';
-      ctx.fillText('클릭 또는 스페이스로 발사', W / 2, paddle.y - 30);
+      ctx.fillText(touchMode ? '좌우로 밀어 조준 · 탭해서 발사' : '클릭 또는 스페이스로 발사', W / 2, paddle.y - 30);
     }
     // 남은 효과 시간
     const tags = [];
     if (paddle.wideT > 0) tags.push(['넓게 ' + Math.ceil(paddle.wideT) + 's', '#e3b23c']);
     if (slowT > 0) tags.push(['느리게 ' + Math.ceil(slowT) + 's', '#6d9fdb']);
     ctx.textAlign = 'left';
-    tags.forEach(([t, c], i) => { ctx.fillStyle = c; ctx.fillText(t, 12 + i * 90, H - 12); });
+    tags.forEach(([t, c], i) => { ctx.fillStyle = c; ctx.fillText(t, 12 + i * 110, H - 12); });
   }
 
   function draw() {
